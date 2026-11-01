@@ -1,0 +1,11 @@
+[package]
+name = "overtune-audit"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+
+[dependencies]
+prettyplease = "0.2"
+quote = "1"
+serde_json = "1"
+syn = { version = "2", features = ["full", "parsing"] }
