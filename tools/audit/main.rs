@@ -19,13 +19,15 @@ fn main() {
     let modded = Path::new(&args[2]);
 
     // Files that horizon-mixins is allowed to add to (game.rs + helpers).
-    let allowed: HashSet<&str> = HashSet::from([
-        "crates/horizon-client/src/game.rs",
-    ]);
+    let allowed: HashSet<&str> = HashSet::from(["crates/horizon-client/src/game.rs"]);
 
     let mut differences = 0;
     for entry in walk(modded) {
-        let rel = entry.strip_prefix(modded).unwrap().to_string_lossy().to_string();
+        let rel = entry
+            .strip_prefix(modded)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         let pristine_path = pristine.join(&rel);
         if !pristine_path.is_file() {
             // New file added by the bundle (a helper .rs). Allowed only if
@@ -48,10 +50,21 @@ fn main() {
         // AST-level comparison: only the injected statements/module should differ.
         let old_ast: File = syn::parse_file(&old).unwrap();
         let new_ast: File = syn::parse_file(&new).unwrap();
-        let old_items: Vec<_> = old_ast.items.iter().map(|i| i.to_token_stream().to_string()).collect();
-        let new_items: Vec<_> = new_ast.items.iter().map(|i| i.to_token_stream().to_string()).collect();
+        let old_items: Vec<_> = old_ast
+            .items
+            .iter()
+            .map(|i| i.to_token_stream().to_string())
+            .collect();
+        let new_items: Vec<_> = new_ast
+            .items
+            .iter()
+            .map(|i| i.to_token_stream().to_string())
+            .collect();
         let old_set: HashSet<_> = old_items.iter().collect();
-        let added: Vec<_> = new_items.iter().filter(|i| !old_set.contains(*i.as_str())).collect();
+        let added: Vec<_> = new_items
+            .iter()
+            .filter(|i| !old_set.contains(*i.as_str()))
+            .collect();
         if !added.is_empty() {
             eprintln!("{rel}: {added} added item(s)");
             for item in &added {

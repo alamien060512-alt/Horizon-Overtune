@@ -206,6 +206,7 @@ impl MusicPlayer {
     }
 
     /// Skip to the next song in the queue, or stop if none.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<Song> {
         self.queue.pop() // LIFO: most recently queued plays next
     }
@@ -216,6 +217,7 @@ impl MusicPlayer {
         if let Some(song) = self.current.as_ref() {
             self.position = self.position.saturating_add(seconds);
             if self.position >= song.duration && song.duration > 0 {
+                self.position = song.duration;
                 return true;
             }
         }
@@ -224,7 +226,9 @@ impl MusicPlayer {
 
     /// Whether the player likes the current song.
     pub fn is_liked(&self) -> bool {
-        self.current.as_ref().map_or(false, |s| self.liked.contains(&s.id))
+        self.current
+            .as_ref()
+            .is_some_and(|s| self.liked.contains(&s.id))
     }
 
     /// Toggle the like state of the current song.
@@ -239,10 +243,9 @@ impl MusicPlayer {
     }
 
     /// The song assigned to an event, if any.
-    pub fn event_song(&self, event: EventType, library: &[Song]) -> Option<&Song> {
-        self.events
-            .get(&event)
-            .and_then(|id| library.iter().find(|s| s.id == *id))
+    pub fn event_song<'a>(&self, event: EventType, library: &'a [Song]) -> Option<&'a Song> {
+        let id = self.events.get(&event)?;
+        library.iter().find(|s| s.id == *id)
     }
 
     /// Volume as a fraction (0.0..=1.0).
@@ -278,20 +281,22 @@ pub struct Settings {
 
 impl Settings {
     pub fn read(get: impl Fn(&str) -> Option<String>) -> Self {
-        let enabled = get("enabled").map_or(true, |v| v.trim() == "true");
+        let enabled = get("enabled").is_none_or(|v| v.trim() == "true");
         let volume = get("volume")
             .and_then(|v| v.trim().parse::<u8>().ok())
             .unwrap_or(DEFAULT_VOLUME)
             .clamp(0, 100);
         let mut event_assignments = HashMap::new();
         for event in EventType::ALL {
-            if let Some(id) = get(event.settings_key()) {
-                if !id.is_empty() {
-                    event_assignments.insert(event, id);
-                }
+            if let Some(id) = get(event.settings_key())
+                && !id.is_empty()
+            {
+                event_assignments.insert(event, id);
             }
         }
-        let import_dir = get("import_dir").filter(|v| !v.trim().is_empty()).map(PathBuf::from);
+        let import_dir = get("import_dir")
+            .filter(|v| !v.trim().is_empty())
+            .map(PathBuf::from);
         Self {
             enabled,
             volume,
@@ -318,47 +323,46 @@ impl Settings {
     }
 }
 
-/// The settings, read once from files then kept in a thread-local cell.
+// The settings, read once from files then kept in a thread-local cell.
 thread_local! {
-    static SETTINGS: std::cell::Cell<Option<Settings>> = const { std::cell::Cell::new(None) };
-    static PLAYER: std::cell::Cell<Option<MusicPlayer>> = const { std::cell::Cell::new(None) };
+    static SETTINGS: std::cell::RefCell<Option<Settings>> = const { std::cell::RefCell::new(None) };
+    static PLAYER: std::cell::RefCell<Option<MusicPlayer>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Read settings once through `get` (one file per key).
 pub fn settings(get: impl Fn(&str) -> Option<String>) -> Settings {
     SETTINGS.with(|s| {
-        let found = s.get().unwrap_or_else(|| Settings::read(get));
-        s.set(Some(found));
-        found
+        let mut slot = s.borrow_mut();
+        slot.get_or_insert_with(|| Settings::read(get)).clone()
     })
 }
 
 /// Replace the settings (the settings page changed them).
 pub fn set_settings(settings: Settings) {
-    SETTINGS.with(|s| s.set(Some(settings)));
+    SETTINGS.with(|s| *s.borrow_mut() = Some(settings));
 }
 
 /// The music player, initialised from settings.
 pub fn player(get: impl Fn(&str) -> Option<String>) -> MusicPlayer {
     PLAYER.with(|p| {
-        let found = p.get().unwrap_or_else(|| {
+        let mut slot = p.borrow_mut();
+        slot.get_or_insert_with(|| {
             let s = Settings::read(&get);
             MusicPlayer {
                 enabled: s.enabled,
                 volume: s.volume,
-                events: s.event_assignments.clone(),
-                import_dir: s.import_dir.clone(),
+                events: s.event_assignments,
+                import_dir: s.import_dir,
                 ..Default::default()
             }
-        });
-        p.set(Some(found.clone()));
-        found
+        })
+        .clone()
     })
 }
 
 /// Replace the music player state.
 pub fn set_player(player: MusicPlayer) {
-    PLAYER.with(|p| p.set(Some(player)));
+    PLAYER.with(|p| *p.borrow_mut() = Some(player));
 }
 
 /// Scan `dir` for audio files and return them as imported songs.
@@ -367,22 +371,21 @@ pub fn scan_import_dir(dir: &PathBuf) -> Vec<Song> {
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_file() {
-                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    let lower = ext.to_lowercase();
-                    if matches!(
-                        lower.as_str(),
-                        "mp3" | "flac" | "wav" | "m4a" | "aac" | "opus" | "ogg"
-                    ) {
-                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                            songs.push(Song::imported(
-                                &format!("import:{}", stem),
-                                stem,
-                                "Imported",
-                                path.clone(),
-                            ));
-                        }
-                    }
+            if path.is_file()
+                && let Some(ext) = path.extension().and_then(|e| e.to_str())
+            {
+                let lower = ext.to_lowercase();
+                if matches!(
+                    lower.as_str(),
+                    "mp3" | "flac" | "wav" | "m4a" | "aac" | "opus" | "ogg"
+                ) && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+                {
+                    songs.push(Song::imported(
+                        &format!("import:{}", stem),
+                        stem,
+                        "Imported",
+                        path.clone(),
+                    ));
                 }
             }
         }
@@ -393,22 +396,118 @@ pub fn scan_import_dir(dir: &PathBuf) -> Vec<Song> {
 /// The vanilla soundtrack library (Minecraft C418 / Lena Raine tracks).
 pub fn vanilla_library() -> Vec<Song> {
     vec![
-        Song::vanilla("minecraft:music.13", "13", "C418", "Minecraft - Volume Alpha", 166),
-        Song::vanilla("minecraft:music.cat", "Cat", "C418", "Minecraft - Volume Alpha", 179),
-        Song::vanilla("minecraft:music.blocks", "Blocks", "C418", "Minecraft - Volume Alpha", 134),
-        Song::vanilla("minecraft:music.chirp", "Chirp", "C418", "Minecraft - Volume Alpha", 106),
-        Song::vanilla("minecraft:music.far", "Far", "C418", "Minecraft - Volume Alpha", 166),
-        Song::vanilla("minecraft:music.mall", "Mall", "C418", "Minecraft - Volume Alpha", 129),
-        Song::vanilla("minecraft:music.mellohi", "Mellohi", "C418", "Minecraft - Volume Alpha", 67),
-        Song::vanilla("minecraft:music.stal", "Stal", "C418", "Minecraft - Volume Alpha", 151),
-        Song::vanilla("minecraft:music.strad", "Strad", "C418", "Minecraft - Volume Alpha", 149),
-        Song::vanilla("minecraft:music.ward", "Ward", "C418", "Minecraft - Volume Alpha", 120),
-        Song::vanilla("minecraft:music.11", "11", "C418", "Minecraft - Volume Alpha", 251),
-        Song::vanilla("minecraft:music.wait", "Wait", "C418", "Minecraft - Volume Alpha", 137),
-        Song::vanilla("minecraft:music.flat", "Flat", "C418", "Minecraft - Volume Alpha", 106),
-        Song::vanilla("minecraft:music.mice_on_venus", "Mice on Venus", "C418", "Minecraft - Volume Alpha", 124),
-        Song::vanilla("minecraft:music.pigstep", "Pigstep", "Lena Raine", "Minecraft - Volume Beta", 151),
-        Song::vanilla("minecraft:music.vibes", "Vibes", "Lena Raine", "Minecraft - Volume Beta", 124),
+        Song::vanilla(
+            "minecraft:music.13",
+            "13",
+            "C418",
+            "Minecraft - Volume Alpha",
+            166,
+        ),
+        Song::vanilla(
+            "minecraft:music.cat",
+            "Cat",
+            "C418",
+            "Minecraft - Volume Alpha",
+            179,
+        ),
+        Song::vanilla(
+            "minecraft:music.blocks",
+            "Blocks",
+            "C418",
+            "Minecraft - Volume Alpha",
+            134,
+        ),
+        Song::vanilla(
+            "minecraft:music.chirp",
+            "Chirp",
+            "C418",
+            "Minecraft - Volume Alpha",
+            106,
+        ),
+        Song::vanilla(
+            "minecraft:music.far",
+            "Far",
+            "C418",
+            "Minecraft - Volume Alpha",
+            166,
+        ),
+        Song::vanilla(
+            "minecraft:music.mall",
+            "Mall",
+            "C418",
+            "Minecraft - Volume Alpha",
+            129,
+        ),
+        Song::vanilla(
+            "minecraft:music.mellohi",
+            "Mellohi",
+            "C418",
+            "Minecraft - Volume Alpha",
+            67,
+        ),
+        Song::vanilla(
+            "minecraft:music.stal",
+            "Stal",
+            "C418",
+            "Minecraft - Volume Alpha",
+            151,
+        ),
+        Song::vanilla(
+            "minecraft:music.strad",
+            "Strad",
+            "C418",
+            "Minecraft - Volume Alpha",
+            149,
+        ),
+        Song::vanilla(
+            "minecraft:music.ward",
+            "Ward",
+            "C418",
+            "Minecraft - Volume Alpha",
+            120,
+        ),
+        Song::vanilla(
+            "minecraft:music.11",
+            "11",
+            "C418",
+            "Minecraft - Volume Alpha",
+            251,
+        ),
+        Song::vanilla(
+            "minecraft:music.wait",
+            "Wait",
+            "C418",
+            "Minecraft - Volume Alpha",
+            137,
+        ),
+        Song::vanilla(
+            "minecraft:music.flat",
+            "Flat",
+            "C418",
+            "Minecraft - Volume Alpha",
+            106,
+        ),
+        Song::vanilla(
+            "minecraft:music.mice_on_venus",
+            "Mice on Venus",
+            "C418",
+            "Minecraft - Volume Alpha",
+            124,
+        ),
+        Song::vanilla(
+            "minecraft:music.pigstep",
+            "Pigstep",
+            "Lena Raine",
+            "Minecraft - Volume Beta",
+            151,
+        ),
+        Song::vanilla(
+            "minecraft:music.vibes",
+            "Vibes",
+            "Lena Raine",
+            "Minecraft - Volume Beta",
+            124,
+        ),
     ]
 }
 
@@ -455,7 +554,10 @@ mod tests {
             s.event_assignments.get(&EventType::Rain),
             Some(&"minecraft:music.pigstep".to_owned())
         );
-        assert_eq!(s.import_dir.as_deref(), Some(std::path::Path::new("/songs/")));
+        assert_eq!(
+            s.import_dir.as_deref(),
+            Some(std::path::Path::new("/songs/"))
+        );
     }
 
     #[test]
@@ -515,8 +617,20 @@ mod tests {
     #[test]
     fn player_next_from_queue() {
         let mut p = MusicPlayer::default();
-        p.play(Song::vanilla("minecraft:music.cat", "Cat", "C418", "Vol Alpha", 179));
-        p.queue(Song::vanilla("minecraft:music.pigstep", "Pigstep", "Lena Raine", "Vol Beta", 151));
+        p.play(Song::vanilla(
+            "minecraft:music.cat",
+            "Cat",
+            "C418",
+            "Vol Alpha",
+            179,
+        ));
+        p.queue(Song::vanilla(
+            "minecraft:music.pigstep",
+            "Pigstep",
+            "Lena Raine",
+            "Vol Beta",
+            151,
+        ));
         let next = p.next();
         assert!(next.is_some());
         assert_eq!(next.as_ref().unwrap().id, "minecraft:music.pigstep");
@@ -525,7 +639,13 @@ mod tests {
     #[test]
     fn player_tick_finishes_song() {
         let mut p = MusicPlayer::default();
-        p.play(Song::vanilla("minecraft:music.mellohi", "Mellohi", "C418", "Vol Alpha", 67));
+        p.play(Song::vanilla(
+            "minecraft:music.mellohi",
+            "Mellohi",
+            "C418",
+            "Vol Alpha",
+            67,
+        ));
         assert!(!p.tick_position(30));
         assert_eq!(p.position, 30);
         assert!(p.tick_position(40));
@@ -535,7 +655,13 @@ mod tests {
     #[test]
     fn player_like_toggle() {
         let mut p = MusicPlayer::default();
-        p.play(Song::vanilla("minecraft:music.cat", "Cat", "C418", "Vol Alpha", 179));
+        p.play(Song::vanilla(
+            "minecraft:music.cat",
+            "Cat",
+            "C418",
+            "Vol Alpha",
+            179,
+        ));
         assert!(!p.is_liked());
         p.toggle_like();
         assert!(p.is_liked());
@@ -572,6 +698,7 @@ mod tests {
     fn import_dir_scans_audio_extensions() {
         use std::fs;
         let dir = tempfile_dir();
+        fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("song.mp3"), b"").unwrap();
         fs::write(dir.join("song.flac"), b"").unwrap();
         fs::write(dir.join("song.txt"), b"").unwrap(); // not audio

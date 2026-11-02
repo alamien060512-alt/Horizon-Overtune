@@ -42,8 +42,9 @@ fn overtune_settings_click(game: &mut crate::game::Game<'_>, mod_id: &str, butto
         _ => {}
     }
 
+    let stored = settings.stored();
     m::set_settings(settings);
-    for (key, value) in settings.stored() {
+    for (key, value) in stored {
         game.native_set_setting(m::ID, key, &value);
     }
 }
