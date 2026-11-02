@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
-description = "Overtune: a clean in-game music player for Horizon (native mod)"
+description = "Overtune: a Spotify-style in-game music player, a native Horizon mod"
 
 [lib]
 # This exact source is also injected as a same-crate module by horizon-mixins.
@@ -13,5 +13,3 @@ path = "mixins/overtune/runtime.rs"
 [workspace]
 members = ["tools/audit"]
 resolver = "2"
-
-[workspace.dependencies]

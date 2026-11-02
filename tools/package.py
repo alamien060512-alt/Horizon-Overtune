@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Package Overtune as a source-only `.hnmod`, the file Horizon's registry and launcher take.
+"""Package the mod as a source-only `.hnmod`, the file Horizon's registry and launcher take.
 
-    python3 tools/package.py
-
-The archive holds `horizon-native.json` and `mixins/overtune/` (only `.rs` and `.toml`),
-with fixed dates and modes, so the same sources always give the same bytes and the
-same SHA-256. Horizon's `horizon_mods::index::native` reads it without running
-anything; the launcher compiles it on the pinned Horizon revision.
+The archive holds `horizon-native.json` and `mixins/<id>/` (only `.rs` and `.toml`), with fixed dates and
+modes, so the same sources always give the same bytes and the same SHA-256. Horizon's
+`horizon_mods::index::native` reads it without running anything; the launcher compiles it on the pinned
+Horizon revision. Based on levzzz5154's packager for Veinminer.
 """
 import hashlib
 import json
@@ -37,7 +35,7 @@ def package():
     files = {'horizon-native.json': (json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode()}
     for path in sorted(bundle.iterdir()):
         if path.is_file() and path.suffix in ('.rs', '.toml'):
-            files[f"mixins/{mod['id']}/{path.name}"] = path.read_bytes()
+            files[path.relative_to(ROOT).as_posix()] = path.read_bytes()
     out = ROOT / 'target' / f"{mod['id']}-{mod['version']}.hnmod"
     out.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
