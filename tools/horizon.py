@@ -1,23 +1,5 @@
 #!/usr/bin/env python3
-"""Export pinned Horizon sources, apply the Overtune bundle and build a native Horizon.
-
-    python3 tools/horizon.py stage --horizon ../horizon
-    cargo fetch --locked --manifest-path target/mixins/modded/Cargo.toml
-    python3 tools/horizon.py check --horizon ../horizon
-    python3 tools/horizon.py test --horizon ../horizon
-    python3 tools/horizon.py build --horizon ../horizon
-
-This template pins Nightly 2026-10-30. Clone Horizon and horizon-mixins beside
-this mod before running the full native checks:
-
-    git clone https://github.com/horizon-rust/horizon ../horizon
-    git clone https://github.com/horizon-rust/horizon-mixins ../horizon-mixins
-    git -C ../horizon-mixins checkout "$(python3 -c 'import json; print(json.load(open("compatibility.json"))["horizon_mixins_revision"])')"
-
-Launch the built client with prepared resources:
-
-    ./target/horizon-cargo/fast/horizon-client --resources /absolute/path/to/prepared/resources
-"""
+"""Export pinned sources, apply the template bundle and build a native Horizon."""
 import argparse
 import contextlib
 import fcntl
@@ -58,7 +40,7 @@ def stage(horizon, stages):
             if digest((out / path).read_bytes()) != expected:
                 raise ValueError(f"staged source was edited: {path}; remove this generated stage to rebuild it")
         return out, False
-    temporary = Path(tempfile.mkdtemp(prefix=".overtune-stage-", dir=stages))
+    temporary = Path(tempfile.mkdtemp(prefix=".mod-template-stage-", dir=stages))
     try:
         process = subprocess.Popen(["git", "-C", str(horizon), "archive", "--format=tar", PIN], stdout=subprocess.PIPE)
         try:
@@ -73,12 +55,15 @@ def stage(horizon, stages):
         for path, expected in COMPAT["source_sha256"].items():
             if digest((temporary / path).read_bytes()) != expected:
                 raise ValueError(f"pinned source hash mismatch: {path}")
+        # Materialize the committed documentation symlink for the mixin CLI's
+        # symlink-free source snapshot. No Rust source is edited here.
         for file in temporary.rglob("*"):
             if file.is_symlink():
                 content = file.read_bytes()
                 file.unlink()
                 file.write_bytes(content)
         (temporary / ".horizon-revision").write_text(PIN + "\n")
+        # The source tree itself is deterministic. Cargo outputs live elsewhere.
         files = {str(p.relative_to(temporary)): digest(p.read_bytes())
                  for p in sorted(temporary.rglob("*")) if p.is_file()}
         (temporary / ".horizon-mod-template.json").write_text(json.dumps(
@@ -163,5 +148,5 @@ if __name__ == "__main__":
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         if isinstance(error, subprocess.CalledProcessError) and error.stderr:
             print(error.stderr, file=sys.stderr)
-        print(f"Overtune native mod: {error}", file=sys.stderr)
+        print(f"Native mod: {error}", file=sys.stderr)
         raise SystemExit(1)

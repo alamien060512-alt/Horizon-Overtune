@@ -1,52 +1,32 @@
-// HEAD hook on `native_hud`: draw the now-playing overlay in a corner.
-
+// The now-playing toast, in the bottom right corner.
 fn overtune_hud(
     game: &mut crate::game::Game<'_>,
     batch: &mut horizon_client::hud::HudBatch,
     corners: &mut horizon_client::extras_hud::Corners,
 ) {
     use crate::game::overtune as m;
-    use horizon_client::extras::Corner;
-
     if !game.native_on(m::ID) {
         return;
     }
-
-    let settings = {
-        let game = &*game;
-        m::settings(|key| game.native_setting(m::ID, key))
-    };
-    if !settings.enabled {
-        return;
-    }
-
-    let player = m::player(|key| game.native_setting(m::ID, key));
-    let Some(song) = player.current.as_ref() else {
-        return;
-    };
-
-    let corner = [
-        Corner::TopLeft,
-        Corner::TopRight,
-        Corner::BottomLeft,
-        Corner::BottomRight,
-    ][0]; // fixed corner for now-playing; settings could choose
-
+    let corner = horizon_client::extras::Corner::BottomRight;
     if !game.native_corner_shown(corner) {
         return;
     }
-
-    let status = if player.paused { "⏸" } else { "▶" };
-    let text = format!(
-        "{} {} — {}  [{}:{}]",
-        status,
-        song.title,
-        song.artist,
-        m::format_position(player.position),
-        m::format_duration(song.duration)
-    );
-    let w = game.native_text_width(&text) + 8.0;
-    let (x, y) = corners.place(corner, w, 16.0);
-    game.native_fill(batch, [x, y, w, 16.0], m::BACKGROUND);
-    game.native_text(batch, &text, [x + 4.0, y + 2.0], m::INK, true);
+    let game = &*game;
+    let lines = m::with(|key| game.native_setting(m::ID, key), |p| {
+        (p.enabled && p.toast_left > 0).then(|| m::toast_lines(p))
+    });
+    let Some(lines) = lines else {
+        return;
+    };
+    let size = m::toast_size(&|text| game.native_text_width(text), &lines);
+    let (x, y) = corners.place(corner, size.0, size.1);
+    for shape in m::toast_shapes(&lines, size) {
+        match shape {
+            m::Shape::Fill([dx, dy, w, h], argb) => game.native_fill(batch, [x + dx, y + dy, w, h], argb),
+            m::Shape::Text(text, [dx, dy], rgb, shadow) => {
+                game.native_text(batch, &text, [x + dx, y + dy], rgb, shadow)
+            }
+        }
+    }
 }
