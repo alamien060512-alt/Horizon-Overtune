@@ -379,7 +379,7 @@ pub fn scan_import_dir(dir: &PathBuf) -> Vec<Song> {
                                 &format!("import:{}", stem),
                                 stem,
                                 "Imported",
-                                path,
+                                path.clone(),
                             ));
                         }
                     }

@@ -20,9 +20,9 @@ fn overtune_key(game: &mut crate::game::Game<'_>, key: &str, pressed: bool) {
         return;
     }
 
-    let play_pause = m::native_mod_key(game, "play_pause", "key.keyboard.p");
-    let next = m::native_mod_key(game, "next", "key.keyboard.n");
-    let like = m::native_mod_key(game, "like", "key.keyboard.l");
+    let play_pause = game.native_mod_key(m::ID, "play_pause", "key.keyboard.p");
+    let next = game.native_mod_key(m::ID, "next", "key.keyboard.n");
+    let like = game.native_mod_key(m::ID, "like", "key.keyboard.l");
 
     let mut player = m::player(|key| game.native_setting(m::ID, key));
 

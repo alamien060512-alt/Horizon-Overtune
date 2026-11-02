@@ -33,7 +33,7 @@ fn overtune_settings_click(game: &mut crate::game::Game<'_>, mod_id: &str, butto
                 let lib = m::vanilla_library();
                 let current = settings.event_assignments.get(&event);
                 // Cycle: none -> first song -> second song -> ... -> none
-                let next_id = current.as_ref().and_then(|id| {
+                let next_id = current.and_then(|id| {
                     lib.iter().position(|s| s.id == *id).and_then(|i| lib.get(i + 1).map(|s| s.id.clone()))
                 }).or_else(|| lib.first().map(|s| s.id.clone()));
                 settings.event_assignments.insert(event, next_id.unwrap_or_default());
