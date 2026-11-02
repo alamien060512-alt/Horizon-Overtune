@@ -6,7 +6,7 @@ priority = 100
 # Tested on this commit. It uses only the native hook points (hooks 1 in
 # compatibility.json).
 [compatibility]
-horizon_revision = "ba6344a59cb9e755b730dcf02285fc0d33b97d3c"
+horizon_revision = "c1f4a7c1968b035596d0cae9985fa154cb5bda41"
 
 [[module]]
 id = "runtime"

@@ -88,8 +88,12 @@ fn main() {
     for (file, tree) in trees {
         let original =
             syn::parse_file(&fs::read_to_string(Path::new(&args[1]).join(&file)).unwrap()).unwrap();
+        // The stage is printed by prettyplease, which respaces the tokens of
+        // macro bodies; print the original the same way once before comparing.
+        let reprinted = syn::parse_file(&prettyplease::unparse(&original)).unwrap();
         assert!(
-            prettyplease::unparse(&original) == prettyplease::unparse(&tree),
+            prettyplease::unparse(&original) == prettyplease::unparse(&tree)
+                || prettyplease::unparse(&reprinted) == prettyplease::unparse(&tree),
             "unexpected source change in {file}"
         );
     }

@@ -1,6 +1,6 @@
 # Validation
 
-Linux, Rust 1.95.0, Horizon `ba6344a59cb9e755b730dcf02285fc0d33b97d3c`,
+Linux, Rust 1.95.0, Horizon `c1f4a7c1968b035596d0cae9985fa154cb5bda41`,
 horizon-mixins `d9c83d7096b7ea5b83678da2efdfd6161f74997e`.
 
 | Check | Result |

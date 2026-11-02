@@ -80,7 +80,7 @@ python3 tools/horizon.py build --horizon ../horizon
 ./target/horizon-cargo/fast/horizon-client --resources /absolute/path/to/prepared/resources
 ```
 
-Pinned to Horizon `ba6344a` (Nightly 2026-10-30) and horizon-mixins `d9c83d7`
+Pinned to Horizon `c1f4a7c` (Nightly 2026-10-31) and horizon-mixins `d9c83d7`
 (0.6.0). Package for the [horizon-mods](https://github.com/horizon-rust/horizon-mods)
 registry with `python3 tools/package.py` (`target/overtune-0.1.0.hnmod`).
 
